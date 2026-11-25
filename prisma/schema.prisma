@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String?  @unique
+  passwordHash String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  profile      UserProfile?
+  matches      MatchPlayer[]
+  achievements UserAchievement[]
+  reportsFiled Report[]          @relation("Reporter")
+  reportsRecv  Report[]          @relation("ReportedUser")
+
+  @@index([username])
+}
+
+model UserProfile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  avatar         String   @default("fox")
+  gamesPlayed    Int      @default(0)
+  gamesWon       Int      @default(0)
+  totalPoints    Int      @default(0)
+  correctGuesses Int      @default(0)
+  bestScore      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Match {
+  id         String        @id @default(cuid())
+  roomCode   String
+  language   String        @default("en")
+  rounds     Int           @default(3)
+  startedAt  DateTime      @default(now())
+  endedAt    DateTime?
+  winnerId   String?
+  players    MatchPlayer[]
+
+  @@index([roomCode])
+  @@index([startedAt])
+}
+
+model MatchPlayer {
+  id             String  @id @default(cuid())
+  matchId        String
+  userId         String?
+  guestName      String
+  avatar         String  @default("fox")
+  score          Int     @default(0)
+  rank           Int     @default(0)
+  correctGuesses Int     @default(0)
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([matchId])
+  @@index([userId])
+}
+
+model RoomRecord {
+  id         String   @id @default(cuid())
+  code       String   @unique
+  isPublic   Boolean  @default(false)
+  language   String   @default("en")
+  rounds     Int      @default(3)
+  drawTime   Int      @default(80)
+  maxPlayers Int      @default(8)
+  createdAt  DateTime @default(now())
+  closedAt   DateTime?
+
+  @@index([code])
+}
+
+model WordCategory {
+  id    String @id @default(cuid())
+  slug  String @unique
+  name  String
+  words Word[]
+}
+
+model Word {
+  id         String       @id @default(cuid())
+  text       String
+  language   String       @default("en") // "en" | "bn-en"
+  difficulty String       @default("easy") // "easy" | "medium" | "hard"
+  categoryId String
+  aliases    String[]     @default([])
+  createdAt  DateTime     @default(now())
+
+  category WordCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([text, language])
+  @@index([language, difficulty])
+  @@index([categoryId])
+}
+
+model Achievement {
+  id          String            @id @default(cuid())
+  slug        String            @unique
+  title       String
+  description String
+  icon        String
+  users       UserAchievement[]
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+}
+
+model Report {
+  id             String   @id @default(cuid())
+  roomCode       String
+  reason         String
+  details        String?
+  reporterId     String?
+  reportedUserId String?
+  reportedName   String?
+  status         String   @default("OPEN") // OPEN | REVIEWED | DISMISSED
+  createdAt      DateTime @default(now())
+
+  reporter     User? @relation("Reporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  reportedUser User? @relation("ReportedUser", fields: [reportedUserId], references: [id], onDelete: SetNull)
+
+  @@index([roomCode])
+  @@index([status])
+}

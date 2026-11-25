@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #F7FAF9;
+  --card: #FFFFFF;
+  --elevated: #EFFBF5;
+  --border: #E5EEE9;
+  --text-main: #172B25;
+  --text-secondary: #687B73;
+  --text-muted: #95A49D;
+}
+
+.dark {
+  --bg: #0D1513;
+  --card: #14211C;
+  --elevated: #1A2B23;
+  --border: #23382E;
+  --text-main: #F0F8F3;
+  --text-secondary: #A0B3A8;
+  --text-muted: #70857A;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text-main);
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+.text-hero {
+  font-size: clamp(2rem, 5vw, 3.75rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+
+.text-page-title {
+  font-size: clamp(1.625rem, 3vw, 2.5rem);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+
+.text-section-title {
+  font-size: clamp(1.375rem, 2.5vw, 1.875rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.brand-gradient {
+  background: linear-gradient(135deg, #16A36A 0%, #3478F6 100%);
+}
+
+.brand-gradient-text {
+  background: linear-gradient(135deg, #16A36A 0%, #3478F6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Prevent accidental page scroll while drawing on touch devices */
+.canvas-touch-lock {
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
