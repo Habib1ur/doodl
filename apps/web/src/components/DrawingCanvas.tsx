@@ -47,14 +47,14 @@ const TOOL_BUTTONS: {
   shortcut: string;
   icon: typeof Pencil;
 }[] = [
-  { id: 'pencil', label: 'Pencil', shortcut: 'P', icon: Pencil },
-  { id: 'spray', label: 'Spray', shortcut: 'S', icon: SprayCan },
-  { id: 'fill', label: 'Fill', shortcut: 'G', icon: PaintBucket },
-  { id: 'line', label: 'Line', shortcut: 'L', icon: Minus },
-  { id: 'rect', label: 'Rectangle', shortcut: 'R', icon: Square },
-  { id: 'circle', label: 'Circle', shortcut: 'C', icon: Circle },
-  { id: 'eraser', label: 'Eraser', shortcut: 'E', icon: Eraser },
-];
+    { id: 'pencil', label: 'Pencil', shortcut: 'P', icon: Pencil },
+    { id: 'spray', label: 'Spray', shortcut: 'S', icon: SprayCan },
+    { id: 'fill', label: 'Fill', shortcut: 'G', icon: PaintBucket },
+    { id: 'line', label: 'Line', shortcut: 'L', icon: Minus },
+    { id: 'rect', label: 'Rectangle', shortcut: 'R', icon: Square },
+    { id: 'circle', label: 'Circle', shortcut: 'C', icon: Circle },
+    { id: 'eraser', label: 'Eraser', shortcut: 'E', icon: Eraser },
+  ];
 
 const isShapeTool = (t: DrawingTool) => t === 'line' || t === 'rect' || t === 'circle';
 
@@ -397,9 +397,8 @@ export function DrawingCanvas({
       {/* Canvas Container */}
       <div
         ref={containerRef}
-        className={`relative w-full overflow-hidden rounded-card border border-surface-border bg-white shadow-soft ${
-          isFullscreen ? 'h-[62vh] sm:h-[70vh]' : 'aspect-[4/3] sm:aspect-[16/11]'
-        }`}
+        className={`relative w-full overflow-hidden rounded-card border border-surface-border bg-white shadow-soft ${isFullscreen ? 'h-[62vh] sm:h-[70vh]' : 'aspect-[4/3] sm:aspect-[16/11]'
+          }`}
       >
         {/* Committed Strokes Layer */}
         <canvas
@@ -409,9 +408,8 @@ export function DrawingCanvas({
           onPointerUp={handlePointerEnd}
           onPointerCancel={handlePointerEnd}
           onPointerLeave={() => setCursorPos(null)}
-          className={`w-full h-full block canvas-touch-lock ${
-            canDraw ? 'cursor-crosshair' : 'cursor-default'
-          }`}
+          className={`w-full h-full block canvas-touch-lock ${canDraw ? 'cursor-crosshair' : 'cursor-default'
+            }`}
         />
 
         {/* Active Stroke Preview Layer */}
@@ -493,11 +491,10 @@ export function DrawingCanvas({
                   title={c.name}
                   aria-label={`Color ${c.name}`}
                   style={{ backgroundColor: c.hex }}
-                  className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full border transition ${
-                    selected
-                      ? 'ring-2 ring-brand-blue ring-offset-2 ring-offset-surface-card scale-110 border-transparent'
-                      : 'border-black/15 hover:scale-105'
-                  }`}
+                  className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full border transition ${selected
+                    ? 'ring-2 ring-brand-blue ring-offset-2 ring-offset-surface-card scale-110 border-transparent'
+                    : 'border-black/15 hover:scale-105'
+                    }`}
                 />
               );
             })}
@@ -536,11 +533,10 @@ export function DrawingCanvas({
                     onClick={() => setTool(id)}
                     title={`${label} (${shortcut})`}
                     aria-label={`${label} tool`}
-                    className={`min-h-[36px] min-w-[36px] rounded-control border inline-flex items-center justify-center transition ${
-                      active
-                        ? activeClass
-                        : 'bg-surface-bg border-surface-border text-ink-secondary hover:text-ink-main hover:bg-surface-elevated'
-                    }`}
+                    className={`min-h-[36px] min-w-[36px] rounded-control border inline-flex items-center justify-center transition ${active
+                      ? activeClass
+                      : 'bg-surface-bg border-surface-border text-ink-secondary hover:text-ink-main hover:bg-surface-elevated'
+                      }`}
                   >
                     <Icon className="w-4 h-4" />
                   </button>
@@ -551,11 +547,10 @@ export function DrawingCanvas({
                 <button
                   type="button"
                   onClick={() => setShapeFilled((v) => !v)}
-                  className={`min-h-[36px] px-2.5 rounded-control border text-xs font-semibold transition ${
-                    shapeFilled
-                      ? 'bg-brand-blue/15 border-brand-blue text-brand-blue'
-                      : 'bg-surface-bg border-surface-border text-ink-secondary hover:text-ink-main'
-                  }`}
+                  className={`min-h-[36px] px-2.5 rounded-control border text-xs font-semibold transition ${shapeFilled
+                    ? 'bg-brand-blue/15 border-brand-blue text-brand-blue'
+                    : 'bg-surface-bg border-surface-border text-ink-secondary hover:text-ink-main'
+                    }`}
                 >
                   {shapeFilled ? 'Filled' : 'Outline'}
                 </button>
@@ -572,11 +567,10 @@ export function DrawingCanvas({
                     type="button"
                     onClick={() => setBrushSize(size)}
                     aria-label={`Brush size ${size}`}
-                    className={`w-6 h-6 rounded-control flex items-center justify-center transition ${
-                      brushSize === size
-                        ? 'bg-brand-green text-white'
-                        : 'text-ink-secondary hover:bg-surface-elevated'
-                    }`}
+                    className={`w-6 h-6 rounded-control flex items-center justify-center transition ${brushSize === size
+                      ? 'bg-brand-green text-white'
+                      : 'text-ink-secondary hover:bg-surface-elevated'
+                      }`}
                   >
                     <span
                       className="rounded-full bg-current"
@@ -597,11 +591,10 @@ export function DrawingCanvas({
                       key={opt.value}
                       type="button"
                       onClick={() => setOpacity(opt.value)}
-                      className={`px-1.5 h-6 rounded-control text-[11px] font-semibold transition ${
-                        opacity === opt.value
-                          ? 'bg-brand-blue text-white'
-                          : 'text-ink-secondary hover:bg-surface-elevated'
-                      }`}
+                      className={`px-1.5 h-6 rounded-control text-[11px] font-semibold transition ${opacity === opt.value
+                        ? 'bg-brand-blue text-white'
+                        : 'text-ink-secondary hover:bg-surface-elevated'
+                        }`}
                     >
                       {opt.label}
                     </button>
