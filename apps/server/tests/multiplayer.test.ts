@@ -104,7 +104,7 @@ describe('Multiplayer room & game flow integration', () => {
       expect(selectAck.ok).toBe(true);
       await drawingPhasePromise;
 
-      // 6. P2 guesses the secret word and earns 100 points
+      // 6. P2 guesses the secret word fast and earns speed-multiplied points (100..300)
       const roundEndedPromise = new Promise<any>((resolve) => {
         p1.once('game:round-ended', resolve);
       });
@@ -117,7 +117,8 @@ describe('Multiplayer room & game flow integration', () => {
       const roundEnd = await roundEndedPromise;
       expect(roundEnd.word).toBe(chosenWord);
       expect(roundEnd.reason).toBe('all_guessed');
-      expect(roundEnd.roundScores[joinAck.playerId]).toBe(100);
+      expect(roundEnd.roundScores[joinAck.playerId]).toBeGreaterThanOrEqual(100);
+      expect(roundEnd.roundScores[joinAck.playerId]).toBeLessThanOrEqual(300);
       expect(roundEnd.roundScores[createAck.playerId]).toBe(50); // 25 per guess + 25 all-guessed bonus
     } finally {
       p1.disconnect();

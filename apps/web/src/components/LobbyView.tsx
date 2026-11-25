@@ -288,7 +288,7 @@ export function LobbyView({ room, playerId }: LobbyViewProps) {
                     onChange={(e) => updateHostSettings({ maxPlayers: Number(e.target.value) })}
                     className="w-full min-h-[38px] px-2.5 rounded-input border border-surface-border bg-surface-bg text-sm text-ink-main"
                   >
-                    {[2, 4, 6, 8, 10].map((n) => (
+                    {[2, 4, 6, 8, 10, 12, 15].map((n) => (
                       <option key={n} value={n}>
                         {n} Players
                       </option>
@@ -303,7 +303,7 @@ export function LobbyView({ room, playerId }: LobbyViewProps) {
                     className="w-full min-h-[38px] px-2.5 rounded-input border border-surface-border bg-surface-bg text-sm text-ink-main"
                   >
                     <option value={0}>No Timer (∞)</option>
-                    {[45, 60, 80, 100, 120, 180].map((sec) => (
+                    {[15, 30, 45, 60, 80, 100, 120, 180].map((sec) => (
                       <option key={sec} value={sec}>
                         {sec}s
                       </option>

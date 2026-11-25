@@ -126,7 +126,7 @@ export function CreateRoomModal({ open, onClose }: CreateRoomModalProps) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="create-room-title"
-            className="relative z-10 w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-panel sm:rounded-panel border border-surface-border bg-surface-card p-5 sm:p-6 shadow-elevated"
+            className="relative z-10 w-full sm:max-w-lg max-h-[92vh] overflow-y-auto no-scrollbar rounded-t-panel sm:rounded-panel border border-surface-border bg-surface-card p-5 sm:p-6 shadow-elevated"
           >
             <div className="flex items-center justify-between mb-5">
               <div>
@@ -226,7 +226,7 @@ export function CreateRoomModal({ open, onClose }: CreateRoomModalProps) {
                     {...register('settings.maxPlayers', { valueAsNumber: true })}
                     className="w-full min-h-[44px] px-3 rounded-input border border-surface-border bg-surface-bg text-sm text-ink-main focus:outline-none focus:ring-2 focus:ring-brand-blue"
                   >
-                    {[2, 4, 6, 8, 10].map((n) => (
+                    {[2, 4, 6, 8, 10, 12, 15].map((n) => (
                       <option key={n} value={n}>
                         {n} Players
                       </option>
@@ -259,7 +259,7 @@ export function CreateRoomModal({ open, onClose }: CreateRoomModalProps) {
                     className="w-full min-h-[44px] px-3 rounded-input border border-surface-border bg-surface-bg text-sm text-ink-main focus:outline-none focus:ring-2 focus:ring-brand-blue"
                   >
                     <option value={0}>No Timer (Unlimited)</option>
-                    {[45, 60, 80, 100, 120, 180].map((sec) => (
+                    {[15, 30, 45, 60, 80, 100, 120, 180].map((sec) => (
                       <option key={sec} value={sec}>
                         {sec} seconds
                       </option>

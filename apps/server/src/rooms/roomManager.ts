@@ -55,6 +55,7 @@ interface InternalRoom {
   usedWords: Set<string>;
   guessOrderCount: number;
   roundScores: Record<string, number>;
+  drawStartedAt: number | null;
   phaseEndsAt: number | null;
   phaseTimer?: NodeJS.Timeout;
   hintTimers: NodeJS.Timeout[];
@@ -205,6 +206,7 @@ export class RoomManager {
       usedWords: new Set(),
       guessOrderCount: 0,
       roundScores: {},
+      drawStartedAt: null,
       phaseEndsAt: null,
       hintTimers: [],
       strokes: [],
@@ -674,7 +676,8 @@ export class RoomManager {
 
     const isNoTimer = room.settings.drawTime === 0;
     const drawMs = room.settings.drawTime * 1000;
-    room.phaseEndsAt = isNoTimer ? null : Date.now() + drawMs;
+    room.drawStartedAt = Date.now();
+    room.phaseEndsAt = isNoTimer ? null : room.drawStartedAt + drawMs;
 
     this.emitPhaseChanged(room);
 
@@ -748,7 +751,7 @@ export class RoomManager {
         player.correctGuessesCount += 1;
         room.guessOrderCount += 1;
 
-        const points =
+        const basePoints =
           room.guessOrderCount === 1
             ? SCORING.FIRST_GUESS
             : room.guessOrderCount === 2
@@ -756,6 +759,19 @@ export class RoomManager {
               : room.guessOrderCount === 3
                 ? SCORING.THIRD_GUESS
                 : SCORING.OTHER_GUESS;
+
+        let remainingRatio = 0;
+        if (room.settings.drawTime === 0) {
+          const elapsedMs = room.drawStartedAt ? Math.max(0, Date.now() - room.drawStartedAt) : 60_000;
+          remainingRatio = Math.max(0, Math.min(1, 1 - elapsedMs / 60_000));
+        } else {
+          const totalMs = room.settings.drawTime * 1000;
+          const remainingMs = room.phaseEndsAt ? Math.max(0, room.phaseEndsAt - Date.now()) : 0;
+          remainingRatio = Math.max(0, Math.min(1, remainingMs / totalMs));
+        }
+
+        const speedMultiplier = 1 + 2 * remainingRatio * remainingRatio;
+        const points = Math.round(basePoints * speedMultiplier);
 
         player.score += points;
         player.roundScore += points;

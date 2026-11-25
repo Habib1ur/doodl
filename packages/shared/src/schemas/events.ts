@@ -37,7 +37,7 @@ export const roomSettingsSchema = z.object({
   drawTime: z
     .union([
       z.literal(0),
-      z.number().int().min(30).max(GAME_DEFAULTS.MAX_DRAW_TIME),
+      z.number().int().min(15).max(GAME_DEFAULTS.MAX_DRAW_TIME),
     ])
     .default(GAME_DEFAULTS.DEFAULT_DRAW_TIME),
   maxPlayers: z

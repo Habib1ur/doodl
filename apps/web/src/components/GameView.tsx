@@ -63,7 +63,7 @@ export function GameView({ room, playerId }: GameViewProps) {
   >('abusive_chat');
   const [reportDetails, setReportDetails] = useState('');
   const [submittingReport, setSubmittingReport] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const chatListRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const updateTimer = () => {
@@ -84,7 +84,10 @@ export function GameView({ room, playerId }: GameViewProps) {
   }, [room.phaseEndsAt, room.phase]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = chatListRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [chatHistory.length]);
 
   const isDrawer = room.currentDrawerId === playerId;
@@ -321,9 +324,9 @@ export function GameView({ room, playerId }: GameViewProps) {
       </div>
 
       {/* Main Responsive Grid: Mobile stacked / Desktop 3-column */}
-      <div className="grid grid-cols-1 lg:grid-cols-[250px_1fr_320px] gap-3 sm:gap-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[250px_1fr_320px] gap-3 sm:gap-4 items-start lg:items-stretch">
         {/* Desktop Left Column: Players */}
-        <aside className="hidden lg:flex flex-col gap-2 rounded-card border border-surface-border bg-surface-card p-3 shadow-soft">
+        <aside className="hidden lg:flex lg:self-start flex-col gap-2 rounded-card border border-surface-border bg-surface-card p-3 shadow-soft">
           <h2 className="text-xs font-bold uppercase tracking-wider text-ink-secondary px-1">
             Scoreboard
           </h2>
@@ -473,8 +476,8 @@ export function GameView({ room, playerId }: GameViewProps) {
         </div>
 
         {/* Right Column: Live Chat & Guess Input */}
-        <section className="rounded-card border border-surface-border bg-surface-card shadow-soft flex flex-col h-[300px] lg:h-[540px]">
-          <div className="px-3.5 py-2.5 border-b border-surface-border flex items-center justify-between">
+        <section className="rounded-card border border-surface-border bg-surface-card shadow-soft flex flex-col h-[300px] lg:h-0 lg:min-h-full">
+          <div className="px-3.5 py-2.5 border-b border-surface-border flex items-center justify-between shrink-0">
             <h2 className="text-xs font-bold uppercase tracking-wider text-ink-secondary">
               Guesses & Chat
             </h2>
@@ -483,7 +486,7 @@ export function GameView({ room, playerId }: GameViewProps) {
             </span>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3 space-y-2 text-sm">
+          <div ref={chatListRef} className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2 text-sm">
             {chatHistory.map((msg) => (
               <div
                 key={msg.id}
@@ -507,7 +510,6 @@ export function GameView({ room, playerId }: GameViewProps) {
                 )}
               </div>
             ))}
-            <div ref={chatEndRef} />
           </div>
 
           <form
