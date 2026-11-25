@@ -50,6 +50,8 @@ export function CreateRoomModal({ open, onClose }: CreateRoomModalProps) {
         rounds: 3,
         drawTime: 80,
         maxPlayers: 10,
+        hintsCount: 2,
+        allowCustomPlayerWord: false,
       },
     },
   });
@@ -263,6 +265,33 @@ export function CreateRoomModal({ open, onClose }: CreateRoomModalProps) {
                       </option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <label htmlFor="create-hints" className="block text-xs font-semibold text-ink-secondary mb-1">
+                    Hints per Turn
+                  </label>
+                  <select
+                    id="create-hints"
+                    {...register('settings.hintsCount', { valueAsNumber: true })}
+                    className="w-full min-h-[44px] px-3 rounded-input border border-surface-border bg-surface-bg text-sm text-ink-main focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                  >
+                    <option value={0}>No Hints (0)</option>
+                    {[1, 2, 3, 4, 5].map((h) => (
+                      <option key={h} value={h}>
+                        {h} {h === 1 ? 'Hint' : 'Hints'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <label className="w-full min-h-[44px] px-3 rounded-input border border-surface-border bg-surface-bg flex items-center gap-2 text-xs font-semibold text-ink-main cursor-pointer">
+                    <input
+                      type="checkbox"
+                      {...register('settings.allowCustomPlayerWord')}
+                      className="rounded border-surface-border text-brand-green focus:ring-brand-green"
+                    />
+                    Players write own word
+                  </label>
                 </div>
               </div>
 

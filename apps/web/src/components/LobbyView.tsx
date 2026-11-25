@@ -328,6 +328,34 @@ export function LobbyView({ room, playerId }: LobbyViewProps) {
                   <span className="block text-[11px] text-ink-secondary">Language</span>
                   <span className="font-bold text-sm">{langLabel}</span>
                 </div>
+                <div>
+                  <label className="block text-ink-secondary mb-1 font-semibold">Hints</label>
+                  <select
+                    value={room.settings.hintsCount ?? 2}
+                    onChange={(e) => updateHostSettings({ hintsCount: Number(e.target.value) })}
+                    className="w-full min-h-[38px] px-2.5 rounded-input border border-surface-border bg-surface-bg text-sm text-ink-main"
+                  >
+                    <option value={0}>No Hints (0)</option>
+                    {[1, 2, 3, 4, 5].map((h) => (
+                      <option key={h} value={h}>
+                        {h} {h === 1 ? 'Hint' : 'Hints'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <label className="w-full min-h-[38px] px-2.5 rounded-input border border-surface-border bg-surface-bg flex items-center gap-2 text-xs font-semibold text-ink-main cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(room.settings.allowCustomPlayerWord)}
+                      onChange={(e) =>
+                        updateHostSettings({ allowCustomPlayerWord: e.target.checked })
+                      }
+                      className="rounded border-surface-border text-brand-green focus:ring-brand-green"
+                    />
+                    Own word mode
+                  </label>
+                </div>
               </div>
             ) : (
               <dl className="grid grid-cols-2 gap-2.5 text-sm">
@@ -350,9 +378,19 @@ export function LobbyView({ room, playerId }: LobbyViewProps) {
                 <div className="p-2.5 rounded-input bg-surface-bg border border-surface-border">
                   <dt className="text-xs text-ink-secondary">Words</dt>
                   <dd className="font-bold text-xs mt-0.5 truncate">
-                    {useCustomOnly && customWords.length > 0
-                      ? `Custom (${customWords.length})`
-                      : room.settings.categories.join(', ')}
+                    {room.settings.allowCustomPlayerWord
+                      ? 'Players write own'
+                      : useCustomOnly && customWords.length > 0
+                        ? `Custom (${customWords.length})`
+                        : room.settings.categories.join(', ')}
+                  </dd>
+                </div>
+                <div className="p-2.5 rounded-input bg-surface-bg border border-surface-border col-span-2">
+                  <dt className="text-xs text-ink-secondary">Hints per Turn</dt>
+                  <dd className="font-bold text-xs mt-0.5">
+                    {(room.settings.hintsCount ?? 2) === 0
+                      ? 'No Hints'
+                      : `${room.settings.hintsCount ?? 2} random letter(s)`}
                   </dd>
                 </div>
               </dl>

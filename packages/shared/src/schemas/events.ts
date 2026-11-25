@@ -52,6 +52,8 @@ export const roomSettingsSchema = z.object({
     .optional()
     .default([]),
   useCustomWordsOnly: z.boolean().optional().default(false),
+  hintsCount: z.number().int().min(0).max(GAME_DEFAULTS.MAX_HINTS).optional().default(GAME_DEFAULTS.DEFAULT_HINTS),
+  allowCustomPlayerWord: z.boolean().optional().default(false),
 });
 
 export const createRoomSchema = z.object({

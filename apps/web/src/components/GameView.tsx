@@ -42,6 +42,7 @@ export function GameView({ room, playerId }: GameViewProps) {
 
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [guessText, setGuessText] = useState('');
+  const [ownWordInput, setOwnWordInput] = useState('');
   const [muteTick, setMuteTick] = useState(0);
   const muted = useSyncExternalStore(
     (cb) => {
@@ -105,9 +106,17 @@ export function GameView({ room, playerId }: GameViewProps) {
   };
 
   const handleSelectWord = (word: string) => {
+    setOwnWordInput('');
     getSocket().emit('word:select', { word }, (ack) => {
       if (!ack.ok) addToast(ack.error, 'error');
     });
+  };
+
+  const handleSubmitOwnWord = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = ownWordInput.trim();
+    if (!trimmed) return;
+    handleSelectWord(trimmed);
   };
 
   const handleSendGuess = (e: React.FormEvent) => {
@@ -375,11 +384,38 @@ export function GameView({ room, playerId }: GameViewProps) {
                 className="absolute inset-0 z-20 rounded-card bg-white/95 dark:bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center"
               >
                 <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mb-1">
-                  Choose a Word to Draw
+                  {room.settings.allowCustomPlayerWord
+                    ? 'Write Your Own Word or Pick One'
+                    : 'Choose a Word to Draw'}
                 </h3>
-                <p className="text-sm text-slate-600 dark:text-slate-300 mb-5">
+                <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
                   Pick fast! {secondsLeft}s remaining
                 </p>
+
+                {room.settings.allowCustomPlayerWord && (
+                  <form
+                    onSubmit={handleSubmitOwnWord}
+                    className="w-full max-w-sm flex gap-2 mb-5"
+                  >
+                    <input
+                      type="text"
+                      maxLength={40}
+                      value={ownWordInput}
+                      onChange={(e) => setOwnWordInput(e.target.value)}
+                      placeholder="Type your secret word..."
+                      autoFocus
+                      className="flex-1 min-h-[44px] px-3.5 rounded-input border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-green"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!ownWordInput.trim()}
+                      className="min-h-[44px] px-4 rounded-input brand-gradient text-white font-bold text-sm shadow-soft hover:opacity-95 disabled:opacity-50"
+                    >
+                      Draw It
+                    </button>
+                  </form>
+                )}
+
                 <div className="flex flex-wrap items-center justify-center gap-3">
                   {wordOptions.map((word) => (
                     <button

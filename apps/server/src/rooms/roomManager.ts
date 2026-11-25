@@ -167,6 +167,8 @@ export class RoomManager {
       customWords: normalizedCustomWords,
       useCustomWordsOnly:
         settingsInput?.useCustomWordsOnly ?? normalizedCustomWords.length > 0,
+      hintsCount: settingsInput?.hintsCount ?? GAME_DEFAULTS.DEFAULT_HINTS,
+      allowCustomPlayerWord: settingsInput?.allowCustomPlayerWord ?? false,
     };
 
     const player: InternalPlayer = {
@@ -471,6 +473,12 @@ export class RoomManager {
         input.useCustomWordsOnly !== undefined
           ? input.useCustomWordsOnly
           : ctx.room.settings.useCustomWordsOnly,
+      hintsCount:
+        input.hintsCount !== undefined ? input.hintsCount : ctx.room.settings.hintsCount,
+      allowCustomPlayerWord:
+        input.allowCustomPlayerWord !== undefined
+          ? input.allowCustomPlayerWord
+          : ctx.room.settings.allowCustomPlayerWord,
     };
 
     this.io.to(ctx.room.code).emit('room:settings-updated', ctx.room.settings);
@@ -606,7 +614,10 @@ export class RoomManager {
     }
     room.wordOptions = options;
     room.phase = 'WORD_SELECTION';
-    const expiresAt = Date.now() + GAME_DEFAULTS.WORD_SELECTION_TIME * 1000;
+    const selectionSeconds = room.settings.allowCustomPlayerWord
+      ? GAME_DEFAULTS.CUSTOM_WORD_SELECTION_TIME
+      : GAME_DEFAULTS.WORD_SELECTION_TIME;
+    const expiresAt = Date.now() + selectionSeconds * 1000;
     room.phaseEndsAt = expiresAt;
 
     this.io.to(room.code).emit('drawing:clear');
@@ -626,7 +637,7 @@ export class RoomManager {
       if (room.phase === 'WORD_SELECTION' && room.wordOptions[0]) {
         this.activateWord(room, room.wordOptions[0]);
       }
-    }, GAME_DEFAULTS.WORD_SELECTION_TIME * 1000);
+    }, selectionSeconds * 1000);
   }
 
   selectWord(socketId: string, word: string): { ok: true } | { ok: false; error: string } {
@@ -640,11 +651,16 @@ export class RoomManager {
     if (room.currentDrawerId !== player.id) {
       return { ok: false, error: 'Only the current drawer can select the word.' };
     }
-    if (!room.wordOptions.includes(word)) {
+
+    const cleaned = word.trim();
+    if (!cleaned || cleaned.length > 40) {
+      return { ok: false, error: 'Word must be between 1 and 40 characters.' };
+    }
+    if (!room.settings.allowCustomPlayerWord && !room.wordOptions.includes(cleaned)) {
       return { ok: false, error: 'Invalid word choice.' };
     }
 
-    this.activateWord(room, word);
+    this.activateWord(room, cleaned);
     return { ok: true };
   }
 
@@ -667,22 +683,23 @@ export class RoomManager {
       this.io.to(drawer.socketId).emit('game:word-assigned', { word });
     }
 
+    const hintsCount = Math.max(
+      0,
+      Math.min(GAME_DEFAULTS.MAX_HINTS, room.settings.hintsCount ?? GAME_DEFAULTS.DEFAULT_HINTS)
+    );
+
     if (isNoTimer) {
-      // Gentle hints in unlimited-time mode
-      room.hintTimers.push(
-        setTimeout(() => this.revealHint(room), 45_000),
-        setTimeout(() => this.revealHint(room), 90_000)
-      );
+      for (let i = 1; i <= hintsCount; i++) {
+        room.hintTimers.push(setTimeout(() => this.revealHint(room), i * 30_000));
+      }
       return;
     }
 
-    // Progressive hints at 50% and 25% remaining time
-    const hintAt1 = Math.floor(drawMs * 0.5);
-    const hintAt2 = Math.floor(drawMs * 0.75);
-    room.hintTimers.push(
-      setTimeout(() => this.revealHint(room), hintAt1),
-      setTimeout(() => this.revealHint(room), hintAt2)
-    );
+    // Evenly spaced progressive hints over the draw duration
+    for (let i = 1; i <= hintsCount; i++) {
+      const hintAt = Math.floor((drawMs * i) / (hintsCount + 1));
+      room.hintTimers.push(setTimeout(() => this.revealHint(room), hintAt));
+    }
 
     room.phaseTimer = setTimeout(() => {
       this.endRound(room, 'time_up');

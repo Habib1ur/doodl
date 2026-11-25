@@ -61,6 +61,8 @@ export interface RoomSettings {
   maxPlayers: number;
   customWords?: string[];
   useCustomWordsOnly?: boolean;
+  hintsCount?: number;
+  allowCustomPlayerWord?: boolean;
 }
 
 export interface RoomState {
