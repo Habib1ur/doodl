@@ -47,7 +47,7 @@ const ACHIEVEMENTS = [
   {
     slug: 'first-win',
     title: 'First Victory',
-    description: 'Win your first match of Doodlio.',
+    description: 'Win your first match of Doodl.',
     icon: '🏆',
   },
   {
@@ -112,7 +112,7 @@ async function main() {
     });
   }
 
-  console.log('Seeded Doodlio categories, words, and achievements.');
+  console.log('Seeded Doodl categories, words, and achievements.');
 }
 
 main()

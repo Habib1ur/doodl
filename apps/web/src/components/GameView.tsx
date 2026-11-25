@@ -144,7 +144,7 @@ export function GameView({ room, playerId }: GameViewProps) {
         }),
       });
       if (res.ok) {
-        addToast('Report submitted. Thank you for keeping Doodlio friendly!', 'success');
+        addToast('Report submitted. Thank you for keeping Doodl friendly!', 'success');
         setReportOpen(false);
         setReportDetails('');
       } else {

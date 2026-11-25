@@ -11,7 +11,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Doodlio — Draw it. Guess it. Own it.',
+  title: 'Doodl — Draw it. Guess it. Own it.',
   description:
     'A fast, modern multiplayer drawing and word-guessing game. Create a room, invite friends, and race to guess every doodle!',
 };

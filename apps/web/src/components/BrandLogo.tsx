@@ -42,7 +42,7 @@ export function BrandLogo({ size = 'md', href = '/' }: BrandLogoProps) {
         <circle cx="25.5" cy="26" r="2.5" fill="#EAF3FF" />
       </svg>
       <span className={`font-extrabold tracking-tight text-ink-main ${textClass}`}>
-        Dood<span className="brand-gradient-text">lio</span>
+        Dood<span className="brand-gradient-text">l</span>
       </span>
     </Link>
   );

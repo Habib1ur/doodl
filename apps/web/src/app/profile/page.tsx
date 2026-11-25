@@ -236,7 +236,7 @@ export default function ProfilePage() {
                     {data.user.username}
                   </h1>
                   <p className="text-sm text-ink-secondary">
-                    Registered Doodlio Player • Best Score: {data.profile.bestScore} pts
+                    Registered Doodl Player • Best Score: {data.profile.bestScore} pts
                   </p>
                 </div>
               </div>

@@ -229,7 +229,7 @@ export default function HomePage() {
           <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-8">
             <div className="text-center max-w-2xl mx-auto space-y-2">
               <h2 className="text-section-title font-extrabold text-ink-main">
-                How to Play Doodlio
+                How to Play Doodl
               </h2>
               <p className="text-sm sm:text-base text-ink-secondary">
                 Jump into a match in under 10 seconds. No downloads, no friction.
@@ -389,7 +389,7 @@ export default function HomePage() {
 
       <footer className="border-t border-surface-border py-6 text-center text-xs sm:text-sm text-ink-secondary">
         <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>© {new Date().getFullYear()} Doodlio. Draw it. Guess it. Own it.</span>
+          <span>© {new Date().getFullYear()} Doodl. Draw it. Guess it. Own it.</span>
           <div className="flex items-center gap-4">
             <Link href="/leaderboard" className="hover:text-ink-main">
               Leaderboard

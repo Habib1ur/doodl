@@ -66,7 +66,7 @@ export default function LeaderboardPage() {
           <div>
             <h1 className="text-page-title font-extrabold text-ink-main">Leaderboard</h1>
             <p className="text-sm text-ink-secondary">
-              Top registered Doodlio artists and guessers.
+              Top registered Doodl artists and guessers.
             </p>
           </div>
         </div>

@@ -33,7 +33,7 @@ export function ResultsView({ room, playerId, results }: ResultsViewProps) {
       .slice(0, 3)
       .map((r) => `#${r.rank} ${r.player.name} (${r.pointsEarned} pts)`)
       .join('\n');
-    const text = `🎨 Doodlio Match Results (${room.code}):\n${summary}`;
+    const text = `🎨 Doodl Match Results (${room.code}):\n${summary}`;
     try {
       await navigator.clipboard.writeText(text);
       addToast('Match results copied to clipboard!', 'success');

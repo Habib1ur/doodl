@@ -52,7 +52,7 @@ app.get('/health', async (_req, res) => {
 app.use('/api', createApiRouter(roomManager));
 
 server.listen(env.PORT, () => {
-  logger.info(`Doodlio server listening on port ${env.PORT}`, {
+  logger.info(`Doodl server listening on port ${env.PORT}`, {
     env: env.NODE_ENV,
     origins: allowedOrigins,
   });

@@ -932,7 +932,7 @@ export class RoomManager {
     this.pushMessage(room, {
       id: crypto.randomUUID(),
       playerId: null,
-      playerName: 'Doodlio',
+      playerName: 'Doodl',
       text,
       type: 'system',
       timestamp: Date.now(),
