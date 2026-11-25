@@ -147,6 +147,15 @@ export class RoomManager {
       code = generateRoomCode();
     }
 
+    const normalizedCustomWords = Array.from(
+      new Map(
+        (settingsInput?.customWords ?? [])
+          .map((w) => w.trim())
+          .filter((w) => w.length > 0)
+          .map((w) => [w.toLowerCase(), w])
+      ).values()
+    ).slice(0, 200);
+
     const playerId = crypto.randomUUID();
     const settings: RoomSettings = {
       isPublic: settingsInput?.isPublic ?? false,
@@ -155,6 +164,9 @@ export class RoomManager {
       rounds: settingsInput?.rounds ?? GAME_DEFAULTS.DEFAULT_ROUNDS,
       drawTime: settingsInput?.drawTime ?? GAME_DEFAULTS.DEFAULT_DRAW_TIME,
       maxPlayers: settingsInput?.maxPlayers ?? GAME_DEFAULTS.MAX_PLAYERS,
+      customWords: normalizedCustomWords,
+      useCustomWordsOnly:
+        settingsInput?.useCustomWordsOnly ?? normalizedCustomWords.length > 0,
     };
 
     const player: InternalPlayer = {
@@ -438,10 +450,27 @@ export class RoomManager {
       return { ok: false, error: 'Cannot change settings during a match.' };
     }
 
+    const nextCustomWords =
+      input.customWords !== undefined
+        ? Array.from(
+            new Map(
+              input.customWords
+                .map((w) => w.trim())
+                .filter((w) => w.length > 0)
+                .map((w) => [w.toLowerCase(), w])
+            ).values()
+          ).slice(0, 200)
+        : ctx.room.settings.customWords;
+
     ctx.room.settings = {
       ...ctx.room.settings,
       ...input,
       categories: input.categories?.length ? input.categories : ctx.room.settings.categories,
+      customWords: nextCustomWords,
+      useCustomWordsOnly:
+        input.useCustomWordsOnly !== undefined
+          ? input.useCustomWordsOnly
+          : ctx.room.settings.useCustomWordsOnly,
     };
 
     this.io.to(ctx.room.code).emit('room:settings-updated', ctx.room.settings);
@@ -560,12 +589,21 @@ export class RoomManager {
       p.role = p.id === drawerId ? 'DRAWER' : 'GUESSER';
     }
 
-    const options = pickWordOptions(
-      room.settings.language,
-      room.settings.categories,
-      room.usedWords,
-      3
-    );
+    const customPool = room.settings.customWords ?? [];
+    let options: string[];
+    if (room.settings.useCustomWordsOnly && customPool.length > 0) {
+      const unused = customPool.filter((w) => !room.usedWords.has(w));
+      const source = unused.length >= 3 ? unused : customPool;
+      const shuffled = [...source].sort(() => Math.random() - 0.5);
+      options = shuffled.slice(0, Math.min(3, shuffled.length));
+    } else {
+      options = pickWordOptions(
+        room.settings.language,
+        room.settings.categories,
+        room.usedWords,
+        3
+      );
+    }
     room.wordOptions = options;
     room.phase = 'WORD_SELECTION';
     const expiresAt = Date.now() + GAME_DEFAULTS.WORD_SELECTION_TIME * 1000;
@@ -618,14 +656,24 @@ export class RoomManager {
     room.wordHint = createInitialHint(word);
     room.phase = 'DRAWING';
 
+    const isNoTimer = room.settings.drawTime === 0;
     const drawMs = room.settings.drawTime * 1000;
-    room.phaseEndsAt = Date.now() + drawMs;
+    room.phaseEndsAt = isNoTimer ? null : Date.now() + drawMs;
 
     this.emitPhaseChanged(room);
 
     const drawer = room.currentDrawerId ? room.players.get(room.currentDrawerId) : null;
     if (drawer?.socketId) {
       this.io.to(drawer.socketId).emit('game:word-assigned', { word });
+    }
+
+    if (isNoTimer) {
+      // Gentle hints in unlimited-time mode
+      room.hintTimers.push(
+        setTimeout(() => this.revealHint(room), 45_000),
+        setTimeout(() => this.revealHint(room), 90_000)
+      );
+      return;
     }
 
     // Progressive hints at 50% and 25% remaining time
@@ -639,6 +687,20 @@ export class RoomManager {
     room.phaseTimer = setTimeout(() => {
       this.endRound(room, 'time_up');
     }, drawMs);
+  }
+
+  endTurn(socketId: string): { ok: true } | { ok: false; error: string } {
+    const ctx = this.getPlayerContext(socketId);
+    if (!ctx) return { ok: false, error: 'Not in a room.' };
+    const { room, player } = ctx;
+    if (room.phase !== 'DRAWING') {
+      return { ok: false, error: 'No active turn to end.' };
+    }
+    if (room.currentDrawerId !== player.id && !player.isHost) {
+      return { ok: false, error: 'Only the drawer or host can end the turn.' };
+    }
+    this.endRound(room, 'time_up');
+    return { ok: true };
   }
 
   private revealHint(room: InternalRoom): void {
@@ -836,12 +898,22 @@ export class RoomManager {
     });
   }
 
+  private canDrawInRoom(room: InternalRoom, player: InternalPlayer): boolean {
+    if (room.phase === 'DRAWING') {
+      return room.currentDrawerId === player.id;
+    }
+    if (room.phase === 'WAITING') {
+      return player.isHost;
+    }
+    return false;
+  }
+
   // Drawing operations
   handleDrawingStart(socketId: string, input: DrawingStartInput): void {
     const ctx = this.getPlayerContext(socketId);
     if (!ctx) return;
     const { room, player } = ctx;
-    if (room.phase !== 'DRAWING' || room.currentDrawerId !== player.id) return;
+    if (!this.canDrawInRoom(room, player)) return;
 
     const stroke: Stroke = {
       id: input.strokeId,
@@ -862,7 +934,7 @@ export class RoomManager {
     const ctx = this.getPlayerContext(socketId);
     if (!ctx) return;
     const { room, player } = ctx;
-    if (room.phase !== 'DRAWING' || room.currentDrawerId !== player.id) return;
+    if (!this.canDrawInRoom(room, player)) return;
 
     const stroke = room.strokes.find((s) => s.id === input.strokeId);
     if (!stroke) return;
@@ -874,7 +946,7 @@ export class RoomManager {
     const ctx = this.getPlayerContext(socketId);
     if (!ctx) return;
     const { room, player } = ctx;
-    if (room.phase !== 'DRAWING' || room.currentDrawerId !== player.id) return;
+    if (!this.canDrawInRoom(room, player)) return;
     this.io.to(room.code).except(socketId).emit('drawing:end', input);
   }
 
@@ -882,7 +954,7 @@ export class RoomManager {
     const ctx = this.getPlayerContext(socketId);
     if (!ctx) return;
     const { room, player } = ctx;
-    if (room.phase !== 'DRAWING' || room.currentDrawerId !== player.id) return;
+    if (!this.canDrawInRoom(room, player)) return;
 
     const removed = room.strokes.pop();
     if (!removed) return;
@@ -894,7 +966,7 @@ export class RoomManager {
     const ctx = this.getPlayerContext(socketId);
     if (!ctx) return;
     const { room, player } = ctx;
-    if (room.phase !== 'DRAWING' || room.currentDrawerId !== player.id) return;
+    if (!this.canDrawInRoom(room, player)) return;
 
     const restored = room.redoStack.pop();
     if (!restored) return;
@@ -906,7 +978,7 @@ export class RoomManager {
     const ctx = this.getPlayerContext(socketId);
     if (!ctx) return;
     const { room, player } = ctx;
-    if (room.phase !== 'DRAWING' || room.currentDrawerId !== player.id) return;
+    if (!this.canDrawInRoom(room, player)) return;
 
     room.strokes = [];
     room.redoStack = [];

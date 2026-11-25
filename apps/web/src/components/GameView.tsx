@@ -158,7 +158,15 @@ export function GameView({ room, playerId }: GameViewProps) {
     }
   };
 
-  const timerDanger = room.phase === 'DRAWING' && secondsLeft <= 10;
+  const isNoTimer = room.phase === 'DRAWING' && room.phaseEndsAt === null;
+  const timerDanger = room.phase === 'DRAWING' && !isNoTimer && secondsLeft <= 10;
+  const isHost = Boolean(room.players.find((p) => p.id === playerId)?.isHost);
+
+  const handleEndTurn = () => {
+    getSocket().emit('game:end-turn', (ack) => {
+      if (!ack.ok) addToast(ack.error, 'error');
+    });
+  };
 
   return (
     <div className="max-w-[1440px] mx-auto px-3 sm:px-5 py-3 sm:py-4 space-y-3">
@@ -219,7 +227,7 @@ export function GameView({ room, playerId }: GameViewProps) {
           )}
         </div>
 
-        {/* Right Controls: Timer, Mute, Leave */}
+        {/* Right Controls: Timer, End Turn, Mute, Leave */}
         <div className="flex items-center gap-2 order-2 sm:order-3">
           <div
             className={`min-w-[68px] px-3 py-1.5 rounded-full font-extrabold text-base sm:text-lg flex items-center justify-center gap-1.5 border ${
@@ -229,8 +237,18 @@ export function GameView({ room, playerId }: GameViewProps) {
             }`}
           >
             <Clock className="w-4 h-4" />
-            <span>{secondsLeft}s</span>
+            <span>{isNoTimer ? '∞' : `${secondsLeft}s`}</span>
           </div>
+
+          {room.phase === 'DRAWING' && (isDrawer || isHost) && (
+            <button
+              type="button"
+              onClick={handleEndTurn}
+              className="min-h-[40px] px-3 rounded-control border border-surface-border bg-surface-bg text-xs font-bold text-ink-main hover:bg-surface-elevated transition"
+            >
+              End Turn
+            </button>
+          )}
 
           <button
             type="button"
@@ -354,12 +372,12 @@ export function GameView({ room, playerId }: GameViewProps) {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="absolute inset-0 z-20 rounded-card bg-surface-card/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center"
+                className="absolute inset-0 z-20 rounded-card bg-white/95 dark:bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center"
               >
-                <h3 className="text-xl sm:text-2xl font-extrabold text-ink-main mb-1">
+                <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mb-1">
                   Choose a Word to Draw
                 </h3>
-                <p className="text-sm text-ink-secondary mb-5">
+                <p className="text-sm text-slate-600 dark:text-slate-300 mb-5">
                   Pick fast! {secondsLeft}s remaining
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-3">
@@ -385,7 +403,7 @@ export function GameView({ room, playerId }: GameViewProps) {
                 initial={{ opacity: 0, scale: 0.96 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0 }}
-                className="absolute inset-0 z-20 rounded-card bg-surface-card/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center"
+                className="absolute inset-0 z-20 rounded-card bg-white/95 dark:bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center"
               >
                 <span className="text-xs font-bold uppercase tracking-wider text-brand-blue mb-1">
                   {roundEndData.reason === 'all_guessed'
@@ -394,7 +412,7 @@ export function GameView({ room, playerId }: GameViewProps) {
                       ? 'Drawer left the room'
                       : "Time's up!"}
                 </span>
-                <h3 className="text-2xl sm:text-3xl font-extrabold text-ink-main mb-4">
+                <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mb-4">
                   The word was{' '}
                   <span className="brand-gradient-text uppercase">{roundEndData.word}</span>
                 </h3>

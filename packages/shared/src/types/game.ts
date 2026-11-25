@@ -59,6 +59,8 @@ export interface RoomSettings {
   rounds: number;
   drawTime: number;
   maxPlayers: number;
+  customWords?: string[];
+  useCustomWordsOnly?: boolean;
 }
 
 export interface RoomState {

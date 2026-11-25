@@ -29,6 +29,8 @@ export function CreateRoomModal({ open, onClose }: CreateRoomModalProps) {
   const router = useRouter();
   const { setSession, addToast } = useGameStore();
   const [submitting, setSubmitting] = useState(false);
+  const [customWordsText, setCustomWordsText] = useState('');
+  const [useCustomOnly, setUseCustomOnly] = useState(true);
 
   const {
     register,
@@ -47,7 +49,7 @@ export function CreateRoomModal({ open, onClose }: CreateRoomModalProps) {
         categories: ['random'],
         rounds: 3,
         drawTime: 80,
-        maxPlayers: 8,
+        maxPlayers: 10,
       },
     },
   });
@@ -71,9 +73,22 @@ export function CreateRoomModal({ open, onClose }: CreateRoomModalProps) {
 
   const onSubmit = (data: CreateRoomInput) => {
     setSubmitting(true);
+    const parsedWords = customWordsText
+      .split(/[\n,]+/)
+      .map((w) => w.trim())
+      .filter((w) => w.length > 0)
+      .slice(0, 200);
+    const payload: CreateRoomInput = {
+      ...data,
+      settings: {
+        ...data.settings,
+        customWords: parsedWords,
+        useCustomWordsOnly: parsedWords.length > 0 ? useCustomOnly : false,
+      },
+      authToken: getAuthToken() ?? undefined,
+    };
     const socket = getSocket();
-    const authToken = getAuthToken() ?? undefined;
-    socket.emit('room:create', { ...data, authToken }, (ack) => {
+    socket.emit('room:create', payload, (ack) => {
       setSubmitting(false);
       if (!ack.ok) {
         addToast(ack.error, 'error');
@@ -209,7 +224,7 @@ export function CreateRoomModal({ open, onClose }: CreateRoomModalProps) {
                     {...register('settings.maxPlayers', { valueAsNumber: true })}
                     className="w-full min-h-[44px] px-3 rounded-input border border-surface-border bg-surface-bg text-sm text-ink-main focus:outline-none focus:ring-2 focus:ring-brand-blue"
                   >
-                    {[2, 4, 6, 8].map((n) => (
+                    {[2, 4, 6, 8, 10].map((n) => (
                       <option key={n} value={n}>
                         {n} Players
                       </option>
@@ -241,13 +256,42 @@ export function CreateRoomModal({ open, onClose }: CreateRoomModalProps) {
                     {...register('settings.drawTime', { valueAsNumber: true })}
                     className="w-full min-h-[44px] px-3 rounded-input border border-surface-border bg-surface-bg text-sm text-ink-main focus:outline-none focus:ring-2 focus:ring-brand-blue"
                   >
-                    {[45, 60, 80, 100, 120].map((sec) => (
+                    <option value={0}>No Timer (Unlimited)</option>
+                    {[45, 60, 80, 100, 120, 180].map((sec) => (
                       <option key={sec} value={sec}>
                         {sec} seconds
                       </option>
                     ))}
                   </select>
                 </div>
+              </div>
+
+              {/* Custom Words */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label htmlFor="create-custom-words" className="text-xs font-semibold text-ink-secondary">
+                    Custom Words (Optional — you can also add more in lobby)
+                  </label>
+                </div>
+                <textarea
+                  id="create-custom-words"
+                  rows={2}
+                  value={customWordsText}
+                  onChange={(e) => setCustomWordsText(e.target.value)}
+                  placeholder="Enter words separated by commas or new lines (e.g. mango, rocket, cricket)"
+                  className="w-full p-2.5 rounded-input border border-surface-border bg-surface-bg text-sm text-ink-main placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand-green"
+                />
+                {customWordsText.trim().length > 0 && (
+                  <label className="mt-1.5 inline-flex items-center gap-2 text-xs font-medium text-ink-secondary cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useCustomOnly}
+                      onChange={(e) => setUseCustomOnly(e.target.checked)}
+                      className="rounded border-surface-border text-brand-green focus:ring-brand-green"
+                    />
+                    Only show my custom words during the game
+                  </label>
+                )}
               </div>
 
               {/* Categories */}
@@ -286,7 +330,7 @@ export function CreateRoomModal({ open, onClose }: CreateRoomModalProps) {
                 ) : (
                   <Sparkles className="w-5 h-5" />
                 )}
-                {submitting ? 'Creating Room...' : 'Create & Enter Lobby'}
+                {submitting ? 'Creating Room...' : 'Create & Start Drawing'}
               </button>
             </form>
           </motion.div>

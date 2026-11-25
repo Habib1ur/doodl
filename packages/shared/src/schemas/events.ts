@@ -35,10 +35,10 @@ export const roomSettingsSchema = z.object({
     .max(GAME_DEFAULTS.MAX_ROUNDS)
     .default(GAME_DEFAULTS.DEFAULT_ROUNDS),
   drawTime: z
-    .number()
-    .int()
-    .min(GAME_DEFAULTS.MIN_DRAW_TIME)
-    .max(GAME_DEFAULTS.MAX_DRAW_TIME)
+    .union([
+      z.literal(0),
+      z.number().int().min(30).max(GAME_DEFAULTS.MAX_DRAW_TIME),
+    ])
     .default(GAME_DEFAULTS.DEFAULT_DRAW_TIME),
   maxPlayers: z
     .number()
@@ -46,6 +46,12 @@ export const roomSettingsSchema = z.object({
     .min(GAME_DEFAULTS.MIN_PLAYERS)
     .max(GAME_DEFAULTS.MAX_PLAYERS)
     .default(GAME_DEFAULTS.MAX_PLAYERS),
+  customWords: z
+    .array(z.string().trim().min(1).max(40))
+    .max(200)
+    .optional()
+    .default([]),
+  useCustomWordsOnly: z.boolean().optional().default(false),
 });
 
 export const createRoomSchema = z.object({

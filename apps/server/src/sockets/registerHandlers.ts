@@ -162,6 +162,10 @@ export function registerSocketHandlers(io: TypedIO, roomManager: RoomManager): v
       cb?.(roomManager.startGame(socket.id));
     });
 
+    socket.on('game:end-turn', (cb) => {
+      cb?.(roomManager.endTurn(socket.id));
+    });
+
     socket.on('game:play-again', (cb) => {
       cb?.(roomManager.playAgain(socket.id));
     });

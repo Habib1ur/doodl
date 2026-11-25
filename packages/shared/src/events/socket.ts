@@ -45,6 +45,7 @@ export interface ClientToServerEvents {
   'room:ready': (payload: { isReady: boolean }, cb?: (ack: SimpleAck) => void) => void;
   'room:settings': (payload: UpdateSettingsInput, cb?: (ack: SimpleAck) => void) => void;
   'game:start': (cb?: (ack: SimpleAck) => void) => void;
+  'game:end-turn': (cb?: (ack: SimpleAck) => void) => void;
   'game:play-again': (cb?: (ack: SimpleAck) => void) => void;
   'word:select': (payload: { word: string }, cb?: (ack: SimpleAck) => void) => void;
   'drawing:start': (payload: DrawingStartInput) => void;
