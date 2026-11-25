@@ -10,7 +10,14 @@ export type GamePhase =
 
 export type PlayerRole = 'DRAWER' | 'GUESSER' | 'SPECTATOR';
 
-export type DrawingTool = 'pencil' | 'eraser';
+export type DrawingTool =
+  | 'pencil'
+  | 'eraser'
+  | 'fill'
+  | 'line'
+  | 'rect'
+  | 'circle'
+  | 'spray';
 
 /**
  * Normalized coordinates in [0, 1] relative to canvas width/height
@@ -28,6 +35,8 @@ export interface Stroke {
   color: string;
   size: number;
   points: Point[];
+  filled?: boolean;
+  opacity?: number;
 }
 
 export interface Player {

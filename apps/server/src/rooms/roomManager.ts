@@ -850,10 +850,12 @@ export class RoomManager {
       color: input.color,
       size: input.size,
       points: [input.point],
+      ...(input.filled !== undefined ? { filled: input.filled } : {}),
+      ...(input.opacity !== undefined ? { opacity: input.opacity } : {}),
     };
     room.strokes.push(stroke);
     room.redoStack = [];
-    this.io.to(room.code).emit('drawing:start', stroke);
+    this.io.to(room.code).except(socketId).emit('drawing:start', stroke);
   }
 
   handleDrawingMove(socketId: string, input: DrawingMoveInput): void {
@@ -865,7 +867,7 @@ export class RoomManager {
     const stroke = room.strokes.find((s) => s.id === input.strokeId);
     if (!stroke) return;
     stroke.points.push(...input.points);
-    this.io.to(room.code).emit('drawing:move', input);
+    this.io.to(room.code).except(socketId).emit('drawing:move', input);
   }
 
   handleDrawingEnd(socketId: string, input: DrawingEndInput): void {
@@ -873,7 +875,7 @@ export class RoomManager {
     if (!ctx) return;
     const { room, player } = ctx;
     if (room.phase !== 'DRAWING' || room.currentDrawerId !== player.id) return;
-    this.io.to(room.code).emit('drawing:end', input);
+    this.io.to(room.code).except(socketId).emit('drawing:end', input);
   }
 
   handleDrawingUndo(socketId: string): void {

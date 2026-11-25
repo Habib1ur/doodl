@@ -99,11 +99,15 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     });
 
     socket.on('drawing:start', (stroke) => {
-      useGameStore.getState().appendStroke(stroke);
+      useGameStore.getState().startActiveStroke(stroke);
     });
 
     socket.on('drawing:move', ({ strokeId, points }) => {
-      useGameStore.getState().appendStrokePoints(strokeId, points);
+      useGameStore.getState().appendActiveStrokePoints(strokeId, points);
+    });
+
+    socket.on('drawing:end', ({ strokeId }) => {
+      useGameStore.getState().commitActiveStroke(strokeId);
     });
 
     socket.on('drawing:sync', ({ strokes }) => {
@@ -149,6 +153,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       socket.off('game:ended');
       socket.off('drawing:start');
       socket.off('drawing:move');
+      socket.off('drawing:end');
       socket.off('drawing:sync');
       socket.off('drawing:clear');
       socket.off('guess:correct');

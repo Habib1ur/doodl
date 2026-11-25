@@ -79,10 +79,12 @@ export const pointSchema = z.object({
 
 export const drawingStartSchema = z.object({
   strokeId: z.string().min(1).max(64),
-  tool: z.enum(['pencil', 'eraser']),
+  tool: z.enum(['pencil', 'eraser', 'fill', 'line', 'rect', 'circle', 'spray']),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
   size: z.number().min(1).max(64),
   point: pointSchema,
+  filled: z.boolean().optional(),
+  opacity: z.number().min(0.1).max(1).optional(),
 });
 
 export const drawingMoveSchema = z.object({

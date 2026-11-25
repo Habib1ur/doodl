@@ -3,11 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
+  Circle,
+  Download,
   Eraser,
   Maximize2,
   Minimize2,
+  Minus,
+  PaintBucket,
   Pencil,
   Redo2,
+  SprayCan,
+  Square,
   Trash2,
   Undo2,
 } from 'lucide-react';
@@ -19,6 +25,7 @@ import {
   type Point,
   type Stroke,
 } from '@doodlio/shared';
+import { drawStrokeOnCtx } from '@/lib/canvasRenderer';
 import { getSocket } from '@/lib/socket';
 import { useGameStore } from '@/stores/useGameStore';
 
@@ -28,47 +35,28 @@ interface DrawingCanvasProps {
   onToggleFullscreen?: () => void;
 }
 
-function drawStrokeOnCtx(
-  ctx: CanvasRenderingContext2D,
-  stroke: Stroke,
-  width: number,
-  height: number
-) {
-  if (stroke.points.length === 0) return;
-  ctx.save();
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = stroke.tool === 'eraser' ? '#FFFFFF' : stroke.color;
-  // Scale brush size relative to a 800px reference width
-  ctx.lineWidth = Math.max(1.5, (stroke.size * width) / 800);
+const OPACITY_OPTIONS = [
+  { label: '100%', value: 1 },
+  { label: '60%', value: 0.6 },
+  { label: '30%', value: 0.3 },
+] as const;
 
-  const pts = stroke.points;
-  if (pts.length === 1) {
-    const p = pts[0]!;
-    ctx.beginPath();
-    ctx.arc(p.x * width, p.y * height, ctx.lineWidth / 2, 0, Math.PI * 2);
-    ctx.fillStyle = ctx.strokeStyle;
-    ctx.fill();
-    ctx.restore();
-    return;
-  }
+const TOOL_BUTTONS: {
+  id: DrawingTool;
+  label: string;
+  shortcut: string;
+  icon: typeof Pencil;
+}[] = [
+  { id: 'pencil', label: 'Pencil', shortcut: 'P', icon: Pencil },
+  { id: 'spray', label: 'Spray', shortcut: 'S', icon: SprayCan },
+  { id: 'fill', label: 'Fill', shortcut: 'G', icon: PaintBucket },
+  { id: 'line', label: 'Line', shortcut: 'L', icon: Minus },
+  { id: 'rect', label: 'Rectangle', shortcut: 'R', icon: Square },
+  { id: 'circle', label: 'Circle', shortcut: 'C', icon: Circle },
+  { id: 'eraser', label: 'Eraser', shortcut: 'E', icon: Eraser },
+];
 
-  ctx.beginPath();
-  ctx.moveTo(pts[0]!.x * width, pts[0]!.y * height);
-
-  for (let i = 1; i < pts.length - 1; i++) {
-    const curr = pts[i]!;
-    const next = pts[i + 1]!;
-    const midX = ((curr.x + next.x) / 2) * width;
-    const midY = ((curr.y + next.y) / 2) * height;
-    ctx.quadraticCurveTo(curr.x * width, curr.y * height, midX, midY);
-  }
-
-  const last = pts[pts.length - 1]!;
-  ctx.lineTo(last.x * width, last.y * height);
-  ctx.stroke();
-  ctx.restore();
-}
+const isShapeTool = (t: DrawingTool) => t === 'line' || t === 'rect' || t === 'circle';
 
 export function DrawingCanvas({
   canDraw,
@@ -76,57 +64,180 @@ export function DrawingCanvas({
   onToggleFullscreen,
 }: DrawingCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const { strokes, reactions } = useGameStore();
+
+  const strokes = useGameStore((s) => s.strokes);
+  const activeStrokes = useGameStore((s) => s.activeStrokes);
+  const reactions = useGameStore((s) => s.reactions);
+  const playerId = useGameStore((s) => s.playerId);
 
   const [tool, setTool] = useState<DrawingTool>('pencil');
   const [color, setColor] = useState<string>(DRAWING_PALETTE[0].hex);
   const [brushSize, setBrushSize] = useState<number>(BRUSH_SIZES[1]);
+  const [shapeFilled, setShapeFilled] = useState<boolean>(false);
+  const [opacity, setOpacity] = useState<number>(1);
+  const [cursorPos, setCursorPos] = useState<{ x: number; y: number; w: number } | null>(null);
 
-  const activeStrokeIdRef = useRef<string | null>(null);
+  const activeLocalStrokeRef = useRef<Stroke | null>(null);
   const pendingPointsRef = useRef<Point[]>([]);
   const flushTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const rafRef = useRef<number | null>(null);
 
-  const redrawAll = useCallback(() => {
-    const canvas = canvasRef.current;
+  const renderedStrokesRef = useRef<Stroke[]>([]);
+  const canvasDimsRef = useRef<{ w: number; h: number; dpr: number }>({ w: 0, h: 0, dpr: 1 });
+
+  const syncCanvasDimensions = useCallback((canvas: HTMLCanvasElement) => {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const targetW = Math.round(rect.width * dpr);
+    const targetH = Math.round(rect.height * dpr);
+    const resized = canvas.width !== targetW || canvas.height !== targetH;
+    if (resized) {
+      canvas.width = targetW;
+      canvas.height = targetH;
+    }
+    return { rect, dpr, resized };
+  }, []);
+
+  // Committed layer: incremental when appending strokes, full redraw only on reset/undo/resize
+  const redrawCommitted = useCallback(
+    (forceFull = false) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return;
+
+      const { rect, dpr, resized } = syncCanvasDimensions(canvas);
+      if (rect.width === 0 || rect.height === 0) return;
+
+      const prev = renderedStrokesRef.current;
+      const canAppendOnly =
+        !forceFull &&
+        !resized &&
+        canvasDimsRef.current.w === rect.width &&
+        canvasDimsRef.current.h === rect.height &&
+        strokes.length >= prev.length &&
+        prev.every((s, idx) => strokes[idx] === s);
+
+      if (canAppendOnly) {
+        if (strokes.length === prev.length) return;
+        ctx.save();
+        ctx.scale(dpr, dpr);
+        for (let i = prev.length; i < strokes.length; i++) {
+          drawStrokeOnCtx(ctx, strokes[i]!, rect.width, rect.height);
+        }
+        ctx.restore();
+        renderedStrokesRef.current = strokes.slice();
+        return;
+      }
+
+      canvasDimsRef.current = { w: rect.width, h: rect.height, dpr };
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, rect.width, rect.height);
+      for (const stroke of strokes) {
+        drawStrokeOnCtx(ctx, stroke, rect.width, rect.height);
+      }
+      ctx.restore();
+      renderedStrokesRef.current = strokes.slice();
+    },
+    [strokes, syncCanvasDimensions]
+  );
+
+  // Preview layer: draws only active in-progress strokes at 60fps
+  const renderPreviewNow = useCallback(() => {
+    rafRef.current = null;
+    const canvas = previewCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    const targetW = Math.round(rect.width * dpr);
-    const targetH = Math.round(rect.height * dpr);
+    const { rect, dpr } = syncCanvasDimensions(canvas);
+    if (rect.width === 0 || rect.height === 0) return;
 
-    if (canvas.width !== targetW || canvas.height !== targetH) {
-      canvas.width = targetW;
-      canvas.height = targetH;
-    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const localStroke = activeLocalStrokeRef.current;
+    const remoteList = Object.values(activeStrokes);
+    if (!localStroke && remoteList.length === 0) return;
 
     ctx.save();
     ctx.scale(dpr, dpr);
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, rect.width, rect.height);
-
-    for (const stroke of strokes) {
-      drawStrokeOnCtx(ctx, stroke, rect.width, rect.height);
+    for (const s of remoteList) {
+      drawStrokeOnCtx(ctx, s, rect.width, rect.height);
+    }
+    if (localStroke) {
+      drawStrokeOnCtx(ctx, localStroke, rect.width, rect.height);
     }
     ctx.restore();
-  }, [strokes]);
+  }, [activeStrokes, syncCanvasDimensions]);
+
+  const schedulePreviewRender = useCallback(() => {
+    if (rafRef.current !== null) return;
+    rafRef.current = requestAnimationFrame(renderPreviewNow);
+  }, [renderPreviewNow]);
 
   useEffect(() => {
-    redrawAll();
-  }, [redrawAll]);
+    redrawCommitted();
+  }, [redrawCommitted]);
+
+  useEffect(() => {
+    schedulePreviewRender();
+  }, [activeStrokes, schedulePreviewRender]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const observer = new ResizeObserver(() => {
-      redrawAll();
+      redrawCommitted(true);
+      schedulePreviewRender();
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, [redrawAll]);
+  }, [redrawCommitted, schedulePreviewRender]);
+
+  // Keyboard shortcuts while drawing
+  useEffect(() => {
+    if (!canDraw) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          getSocket().emit('drawing:redo');
+        } else {
+          getSocket().emit('drawing:undo');
+        }
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        getSocket().emit('drawing:redo');
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k === 'p' || k === 'b') setTool('pencil');
+      else if (k === 's') setTool('spray');
+      else if (k === 'g') setTool('fill');
+      else if (k === 'l') setTool('line');
+      else if (k === 'r') setTool('rect');
+      else if (k === 'c') setTool('circle');
+      else if (k === 'e') setTool('eraser');
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [canDraw]);
 
   const getNormalizedPoint = (e: React.PointerEvent<HTMLCanvasElement>): Point => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -136,21 +247,58 @@ export function DrawingCanvas({
   };
 
   const flushPendingPoints = useCallback(() => {
-    const strokeId = activeStrokeIdRef.current;
-    if (!strokeId || pendingPointsRef.current.length === 0) return;
+    const local = activeLocalStrokeRef.current;
+    if (!local || pendingPointsRef.current.length === 0) return;
     const batch = pendingPointsRef.current.splice(0, 100);
-    getSocket().emit('drawing:move', { strokeId, points: batch });
+    getSocket().emit('drawing:move', { strokeId: local.id, points: batch });
   }, []);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!canDraw) return;
     e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-
     const point = getNormalizedPoint(e);
     const strokeId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    activeStrokeIdRef.current = strokeId;
+
+    // Instant bucket fill: single click, commit locally & emit
+    if (tool === 'fill') {
+      const fillStroke: Stroke = {
+        id: strokeId,
+        playerId: playerId ?? 'local',
+        tool: 'fill',
+        color,
+        size: brushSize,
+        points: [point],
+        opacity,
+      };
+      useGameStore.getState().appendStroke(fillStroke);
+      getSocket().emit('drawing:start', {
+        strokeId,
+        tool: 'fill',
+        color,
+        size: brushSize,
+        point,
+        opacity,
+      });
+      getSocket().emit('drawing:end', { strokeId });
+      return;
+    }
+
+    e.currentTarget.setPointerCapture(e.pointerId);
+
+    const newStroke: Stroke = {
+      id: strokeId,
+      playerId: playerId ?? 'local',
+      tool,
+      color,
+      size: brushSize,
+      points: [point],
+      ...(isShapeTool(tool) ? { filled: shapeFilled } : {}),
+      ...(tool !== 'eraser' && opacity < 1 ? { opacity } : {}),
+    };
+
+    activeLocalStrokeRef.current = newStroke;
     pendingPointsRef.current = [];
+    schedulePreviewRender();
 
     getSocket().emit('drawing:start', {
       strokeId,
@@ -158,39 +306,91 @@ export function DrawingCanvas({
       color,
       size: brushSize,
       point,
+      ...(isShapeTool(tool) ? { filled: shapeFilled } : {}),
+      ...(tool !== 'eraser' && opacity < 1 ? { opacity } : {}),
     });
 
     if (flushTimerRef.current) clearInterval(flushTimerRef.current);
-    flushTimerRef.current = setInterval(flushPendingPoints, 30);
+    flushTimerRef.current = setInterval(flushPendingPoints, isShapeTool(tool) ? 75 : 24);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!canDraw || !activeStrokeIdRef.current) return;
+    if (canDraw && e.pointerType === 'mouse') {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setCursorPos({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+        w: rect.width,
+      });
+    }
+
+    const local = activeLocalStrokeRef.current;
+    if (!canDraw || !local) return;
     e.preventDefault();
     const point = getNormalizedPoint(e);
+
+    if (isShapeTool(local.tool)) {
+      local.points = [local.points[0]!, point];
+      pendingPointsRef.current = [point];
+      schedulePreviewRender();
+      return;
+    }
+
+    const last = local.points[local.points.length - 1];
+    if (last) {
+      const dx = point.x - last.x;
+      const dy = point.y - last.y;
+      if (dx * dx + dy * dy < 0.00000225) return;
+    }
+
+    local.points.push(point);
     pendingPointsRef.current.push(point);
-    if (pendingPointsRef.current.length >= 12) {
+    schedulePreviewRender();
+
+    if (pendingPointsRef.current.length >= 10) {
       flushPendingPoints();
     }
   };
 
   const handlePointerEnd = () => {
-    if (!activeStrokeIdRef.current) return;
+    const local = activeLocalStrokeRef.current;
+    if (!local) return;
     flushPendingPoints();
     if (flushTimerRef.current) {
       clearInterval(flushTimerRef.current);
       flushTimerRef.current = null;
     }
-    const strokeId = activeStrokeIdRef.current;
-    activeStrokeIdRef.current = null;
-    getSocket().emit('drawing:end', { strokeId });
+    const finishedStroke: Stroke = {
+      ...local,
+      points: local.points.slice(),
+    };
+    activeLocalStrokeRef.current = null;
+    schedulePreviewRender();
+
+    useGameStore.getState().appendStroke(finishedStroke);
+    getSocket().emit('drawing:end', { strokeId: finishedStroke.id });
+  };
+
+  const handleDownload = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const link = document.createElement('a');
+    link.download = `doodl-${Date.now()}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
   };
 
   useEffect(() => {
     return () => {
       if (flushTimerRef.current) clearInterval(flushTimerRef.current);
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
   }, []);
+
+  const previewCursorSize =
+    cursorPos && cursorPos.w > 0
+      ? Math.max(4, (brushSize * cursorPos.w) / 800)
+      : brushSize;
 
   return (
     <div className="flex flex-col gap-2.5 w-full">
@@ -201,28 +401,60 @@ export function DrawingCanvas({
           isFullscreen ? 'h-[62vh] sm:h-[70vh]' : 'aspect-[4/3] sm:aspect-[16/11]'
         }`}
       >
+        {/* Committed Strokes Layer */}
         <canvas
           ref={canvasRef}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerEnd}
           onPointerCancel={handlePointerEnd}
+          onPointerLeave={() => setCursorPos(null)}
           className={`w-full h-full block canvas-touch-lock ${
             canDraw ? 'cursor-crosshair' : 'cursor-default'
           }`}
         />
 
-        {/* Fullscreen toggle button */}
-        {onToggleFullscreen && (
+        {/* Active Stroke Preview Layer */}
+        <canvas
+          ref={previewCanvasRef}
+          className="pointer-events-none absolute inset-0 w-full h-full block"
+        />
+
+        {/* Brush Size Cursor Ring */}
+        {canDraw && cursorPos && tool !== 'fill' && (
+          <div
+            className="pointer-events-none absolute rounded-full border border-slate-700/70 shadow-[0_0_0_1px_rgba(255,255,255,0.8)]"
+            style={{
+              width: previewCursorSize,
+              height: previewCursorSize,
+              left: cursorPos.x - previewCursorSize / 2,
+              top: cursorPos.y - previewCursorSize / 2,
+            }}
+          />
+        )}
+
+        {/* Top-right Canvas Controls */}
+        <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5">
           <button
             type="button"
-            onClick={onToggleFullscreen}
-            aria-label={isFullscreen ? 'Exit fullscreen canvas' : 'Fullscreen canvas'}
-            className="absolute top-2.5 right-2.5 min-h-[38px] min-w-[38px] rounded-control bg-white/90 hover:bg-white text-slate-700 border border-slate-200 shadow-sm inline-flex items-center justify-center transition"
+            onClick={handleDownload}
+            aria-label="Download drawing as PNG"
+            title="Download PNG"
+            className="min-h-[38px] min-w-[38px] rounded-control bg-white/90 hover:bg-white text-slate-700 border border-slate-200 shadow-sm inline-flex items-center justify-center transition"
           >
-            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            <Download className="w-4 h-4" />
           </button>
-        )}
+          {onToggleFullscreen && (
+            <button
+              type="button"
+              onClick={onToggleFullscreen}
+              aria-label={isFullscreen ? 'Exit fullscreen canvas' : 'Fullscreen canvas'}
+              className="min-h-[38px] min-w-[38px] rounded-control bg-white/90 hover:bg-white text-slate-700 border border-slate-200 shadow-sm inline-flex items-center justify-center transition"
+            >
+              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
+          )}
+        </div>
 
         {/* Floating Emoji Reactions */}
         <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap gap-1.5">
@@ -245,22 +477,23 @@ export function DrawingCanvas({
 
       {/* Drawing Toolbar (Drawer only) or Reaction Bar (Guessers) */}
       {canDraw ? (
-        <div className="rounded-card border border-surface-border bg-surface-card p-2.5 sm:p-3 shadow-soft flex flex-wrap items-center justify-between gap-2.5">
-          {/* Colors */}
+        <div className="rounded-card border border-surface-border bg-surface-card p-2.5 sm:p-3 shadow-soft flex flex-col gap-2.5">
+          {/* Row 1: 24-Color Palette + Custom Color */}
           <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Color palette">
             {DRAWING_PALETTE.map((c) => {
-              const selected = tool === 'pencil' && color === c.hex;
+              const selected = tool !== 'eraser' && color.toLowerCase() === c.hex.toLowerCase();
               return (
                 <button
                   key={c.hex}
                   type="button"
                   onClick={() => {
-                    setTool('pencil');
+                    if (tool === 'eraser') setTool('pencil');
                     setColor(c.hex);
                   }}
+                  title={c.name}
                   aria-label={`Color ${c.name}`}
                   style={{ backgroundColor: c.hex }}
-                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border transition ${
+                  className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full border transition ${
                     selected
                       ? 'ring-2 ring-brand-blue ring-offset-2 ring-offset-surface-card scale-110 border-transparent'
                       : 'border-black/15 hover:scale-105'
@@ -270,13 +503,13 @@ export function DrawingCanvas({
             })}
             <label
               title="Custom color"
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-surface-border overflow-hidden cursor-pointer flex items-center justify-center bg-surface-bg text-[10px] font-bold"
+              className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border border-surface-border overflow-hidden cursor-pointer flex items-center justify-center bg-surface-bg text-[11px] font-bold"
             >
               <input
                 type="color"
                 value={color}
                 onChange={(e) => {
-                  setTool('pencil');
+                  if (tool === 'eraser') setTool('pencil');
                   setColor(e.target.value);
                 }}
                 aria-label="Custom color picker"
@@ -286,85 +519,127 @@ export function DrawingCanvas({
             </label>
           </div>
 
-          {/* Brush Sizes + Actions */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            {/* Sizes */}
-            <div className="flex items-center gap-1 px-1.5 py-1 rounded-input bg-surface-bg border border-surface-border">
-              {BRUSH_SIZES.map((size) => (
+          {/* Row 2: Tools, Shape Fill, Brush Sizes, Opacity, Undo/Redo/Clear */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* Drawing Tools */}
+            <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Drawing tools">
+              {TOOL_BUTTONS.map(({ id, label, shortcut, icon: Icon }) => {
+                const active = tool === id;
+                const activeClass =
+                  id === 'eraser'
+                    ? 'bg-brand-blue text-white border-brand-blue'
+                    : 'bg-brand-green text-white border-brand-green';
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setTool(id)}
+                    title={`${label} (${shortcut})`}
+                    aria-label={`${label} tool`}
+                    className={`min-h-[36px] min-w-[36px] rounded-control border inline-flex items-center justify-center transition ${
+                      active
+                        ? activeClass
+                        : 'bg-surface-bg border-surface-border text-ink-secondary hover:text-ink-main hover:bg-surface-elevated'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                  </button>
+                );
+              })}
+
+              {(tool === 'rect' || tool === 'circle') && (
                 <button
-                  key={size}
                   type="button"
-                  onClick={() => setBrushSize(size)}
-                  aria-label={`Brush size ${size}`}
-                  className={`w-7 h-7 rounded-control flex items-center justify-center transition ${
-                    brushSize === size
-                      ? 'bg-brand-green text-white'
-                      : 'text-ink-secondary hover:bg-surface-elevated'
+                  onClick={() => setShapeFilled((v) => !v)}
+                  className={`min-h-[36px] px-2.5 rounded-control border text-xs font-semibold transition ${
+                    shapeFilled
+                      ? 'bg-brand-blue/15 border-brand-blue text-brand-blue'
+                      : 'bg-surface-bg border-surface-border text-ink-secondary hover:text-ink-main'
                   }`}
                 >
-                  <span
-                    className="rounded-full bg-current"
-                    style={{
-                      width: Math.min(18, Math.max(4, size * 0.55)),
-                      height: Math.min(18, Math.max(4, size * 0.55)),
-                    }}
-                  />
+                  {shapeFilled ? 'Filled' : 'Outline'}
                 </button>
-              ))}
+              )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => setTool('pencil')}
-              aria-label="Pencil tool"
-              className={`min-h-[40px] min-w-[40px] rounded-control border inline-flex items-center justify-center transition ${
-                tool === 'pencil'
-                  ? 'bg-brand-green text-white border-brand-green'
-                  : 'bg-surface-bg border-surface-border text-ink-secondary hover:text-ink-main'
-              }`}
-            >
-              <Pencil className="w-4 h-4" />
-            </button>
+            {/* Sizes + Opacity + History Actions */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {/* Brush Sizes */}
+              <div className="flex items-center gap-1 px-1.5 py-1 rounded-input bg-surface-bg border border-surface-border">
+                {BRUSH_SIZES.map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => setBrushSize(size)}
+                    aria-label={`Brush size ${size}`}
+                    className={`w-6 h-6 rounded-control flex items-center justify-center transition ${
+                      brushSize === size
+                        ? 'bg-brand-green text-white'
+                        : 'text-ink-secondary hover:bg-surface-elevated'
+                    }`}
+                  >
+                    <span
+                      className="rounded-full bg-current"
+                      style={{
+                        width: Math.min(16, Math.max(4, size * 0.5)),
+                        height: Math.min(16, Math.max(4, size * 0.5)),
+                      }}
+                    />
+                  </button>
+                ))}
+              </div>
 
-            <button
-              type="button"
-              onClick={() => setTool('eraser')}
-              aria-label="Eraser tool"
-              className={`min-h-[40px] min-w-[40px] rounded-control border inline-flex items-center justify-center transition ${
-                tool === 'eraser'
-                  ? 'bg-brand-blue text-white border-brand-blue'
-                  : 'bg-surface-bg border-surface-border text-ink-secondary hover:text-ink-main'
-              }`}
-            >
-              <Eraser className="w-4 h-4" />
-            </button>
+              {/* Opacity */}
+              {tool !== 'eraser' && (
+                <div className="flex items-center gap-0.5 px-1 py-1 rounded-input bg-surface-bg border border-surface-border">
+                  {OPACITY_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setOpacity(opt.value)}
+                      className={`px-1.5 h-6 rounded-control text-[11px] font-semibold transition ${
+                        opacity === opt.value
+                          ? 'bg-brand-blue text-white'
+                          : 'text-ink-secondary hover:bg-surface-elevated'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
 
-            <button
-              type="button"
-              onClick={() => getSocket().emit('drawing:undo')}
-              aria-label="Undo stroke"
-              className="min-h-[40px] min-w-[40px] rounded-control border border-surface-border bg-surface-bg text-ink-secondary hover:text-ink-main hover:bg-surface-elevated inline-flex items-center justify-center transition"
-            >
-              <Undo2 className="w-4 h-4" />
-            </button>
+              {/* Undo / Redo / Clear */}
+              <button
+                type="button"
+                onClick={() => getSocket().emit('drawing:undo')}
+                title="Undo (Ctrl+Z)"
+                aria-label="Undo stroke"
+                className="min-h-[36px] min-w-[36px] rounded-control border border-surface-border bg-surface-bg text-ink-secondary hover:text-ink-main hover:bg-surface-elevated inline-flex items-center justify-center transition"
+              >
+                <Undo2 className="w-4 h-4" />
+              </button>
 
-            <button
-              type="button"
-              onClick={() => getSocket().emit('drawing:redo')}
-              aria-label="Redo stroke"
-              className="min-h-[40px] min-w-[40px] rounded-control border border-surface-border bg-surface-bg text-ink-secondary hover:text-ink-main hover:bg-surface-elevated inline-flex items-center justify-center transition"
-            >
-              <Redo2 className="w-4 h-4" />
-            </button>
+              <button
+                type="button"
+                onClick={() => getSocket().emit('drawing:redo')}
+                title="Redo (Ctrl+Y)"
+                aria-label="Redo stroke"
+                className="min-h-[36px] min-w-[36px] rounded-control border border-surface-border bg-surface-bg text-ink-secondary hover:text-ink-main hover:bg-surface-elevated inline-flex items-center justify-center transition"
+              >
+                <Redo2 className="w-4 h-4" />
+              </button>
 
-            <button
-              type="button"
-              onClick={() => getSocket().emit('drawing:clear')}
-              aria-label="Clear canvas"
-              className="min-h-[40px] min-w-[40px] rounded-control border border-semantic-danger/30 bg-semantic-danger/10 text-semantic-danger hover:bg-semantic-danger hover:text-white inline-flex items-center justify-center transition"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+              <button
+                type="button"
+                onClick={() => getSocket().emit('drawing:clear')}
+                title="Clear canvas"
+                aria-label="Clear canvas"
+                className="min-h-[36px] min-w-[36px] rounded-control border border-semantic-danger/30 bg-semantic-danger/10 text-semantic-danger hover:bg-semantic-danger hover:text-white inline-flex items-center justify-center transition"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       ) : (

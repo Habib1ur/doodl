@@ -19,6 +19,7 @@ interface GameStore {
   sessionToken: string | null;
   room: RoomState | null;
   strokes: Stroke[];
+  activeStrokes: Record<string, Stroke>;
   chatHistory: ChatMessage[];
   wordOptions: string[];
   wordOptionsExpiresAt: number | null;
@@ -39,7 +40,9 @@ interface GameStore {
   setRoom: (room: RoomState) => void;
   setStrokes: (strokes: Stroke[]) => void;
   appendStroke: (stroke: Stroke) => void;
-  appendStrokePoints: (strokeId: string, points: Stroke['points']) => void;
+  startActiveStroke: (stroke: Stroke) => void;
+  appendActiveStrokePoints: (strokeId: string, points: Stroke['points']) => void;
+  commitActiveStroke: (strokeId: string) => void;
   clearStrokes: () => void;
   addChatMessage: (msg: ChatMessage) => void;
   setWordOptions: (options: string[], expiresAt: number) => void;
@@ -59,6 +62,7 @@ export const useGameStore = create<GameStore>((set) => ({
   sessionToken: null,
   room: null,
   strokes: [],
+  activeStrokes: {},
   chatHistory: [],
   wordOptions: [],
   wordOptionsExpiresAt: null,
@@ -81,6 +85,7 @@ export const useGameStore = create<GameStore>((set) => ({
       sessionToken,
       room,
       strokes,
+      activeStrokes: {},
       chatHistory,
       roundEndData: null,
       gameEndData: null,
@@ -89,19 +94,41 @@ export const useGameStore = create<GameStore>((set) => ({
 
   setRoom: (room) => set({ room }),
 
-  setStrokes: (strokes) => set({ strokes }),
+  setStrokes: (strokes) => set({ strokes, activeStrokes: {} }),
 
   appendStroke: (stroke) =>
     set((state) => ({ strokes: [...state.strokes, stroke] })),
 
-  appendStrokePoints: (strokeId, points) =>
+  startActiveStroke: (stroke) =>
     set((state) => ({
-      strokes: state.strokes.map((s) =>
-        s.id === strokeId ? { ...s, points: [...s.points, ...points] } : s
-      ),
+      activeStrokes: { ...state.activeStrokes, [stroke.id]: stroke },
     })),
 
-  clearStrokes: () => set({ strokes: [] }),
+  appendActiveStrokePoints: (strokeId, points) =>
+    set((state) => {
+      const existing = state.activeStrokes[strokeId];
+      if (!existing) return state;
+      return {
+        activeStrokes: {
+          ...state.activeStrokes,
+          [strokeId]: { ...existing, points: [...existing.points, ...points] },
+        },
+      };
+    }),
+
+  commitActiveStroke: (strokeId) =>
+    set((state) => {
+      const existing = state.activeStrokes[strokeId];
+      if (!existing) return state;
+      const rest = { ...state.activeStrokes };
+      delete rest[strokeId];
+      return {
+        activeStrokes: rest,
+        strokes: [...state.strokes, existing],
+      };
+    }),
+
+  clearStrokes: () => set({ strokes: [], activeStrokes: {} }),
 
   addChatMessage: (msg) =>
     set((state) => ({
@@ -146,6 +173,7 @@ export const useGameStore = create<GameStore>((set) => ({
       sessionToken: null,
       room: null,
       strokes: [],
+      activeStrokes: {},
       chatHistory: [],
       wordOptions: [],
       wordOptionsExpiresAt: null,
